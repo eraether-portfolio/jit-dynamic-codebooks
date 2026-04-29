@@ -278,7 +278,7 @@ Very simple backgrounds.
 
 Entropy sampling, 6 full passes, 1.5 temperature:
 
-![6 full 0 refinement, entropy sampling, 1.5 temperature](./images/output_collage_6_6_entropy_1.5_temp.png)
+![6 full 0 refinement, entropy sampling, 1.5 temperature](./images/output_collage_6_6_temp_1.5.png)
 
 Chaotic, dream-like outputs.
 
