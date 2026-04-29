@@ -2,10 +2,6 @@
 ### Per-patch candidate generation with single-head multiple-choice learning
 Eugene Raether, AI Engineer & Researcher @ Qualia Tensor LLC
 
----
-
-![Results](./images/collage_6_0_entropy_sampling_main.png)
-
 ## Foreword
 
 This is a portfolio piece. It documents a generative modeling project I built and trained solo on a single GPU over several weeks, and it's written for a few different readers at once -- researchers, engineers, and hiring managers -- so a quick orientation is in order.
@@ -81,67 +77,13 @@ As you can see, initially, the variance is very high (as the latent generator ha
 
 ## Pipeline Overview
 
-```
-Stage 1: Autoencoding:  Image → Continuous latents       (3×512×512 → 128×16×16)
-Stage 2: JIT Latent Suggestion: Latents → 16 candidates/patch    (128×16×16 → 16×128×16×16)
-Stage 3: MaskGIT-like generation over a dynamic codebook: Candidates → categorical pick    (16×128×16×16 → 256x16 (per-patch logits))
-```
-
-Generation runs Stages 2 and 3 iteratively. Each refinement pass regenerates all 16 candidates per patch under the current context, then Stage 3 picks one index per patch.
-
 ### Stage 1 -- Continuous Autoencoder (~300M params)
 - **Purpose:** Learn a structured latent bottleneck.
-- **Architecture:** 6 GCNN-ATTN encoder layers → tanh bottleneck → 6 GCNN-ATTN decoder layers.
+- **Architecture:** 6 GCNN-ATTN encoder layers → tanh bottleneck (128 dim) → 6 GCNN-ATTN decoder layers.
 - **Loss:** Smooth L1.
 - **Training:** 3 hours on 1×4090.
 
 [Link to Autoencoder](./code/stage_1_autoencoder_simple_ae_cnn_attn.py)
-```
-+----------------------------------------+------------+
-|                Modules                 | Parameters |
-+----------------------------------------+------------+
-|       encoder.patch_proj.weight        |  3145728   |
-|   encoder.position_embedding.weight    |   262144   |
-|   encoder.layers.0.query_proj.weight   |  9437184   |
-|    encoder.layers.0.key_proj.weight    |  1048576   |
-|   encoder.layers.0.value_proj.weight   |  1048576   |
-|      encoder.layers.0.norm.weight      |    1024    |
-|       encoder.layers.0.norm.bias       |    1024    |
-|     encoder.layers.0.norm2.weight      |    1024    |
-| encoder.layers.0.mlp.fused_proj.weight |  8388608   |
-| encoder.layers.0.mlp.down_proj.weight  |  4194304   |
-                      ----
-|   encoder.layers.5.query_proj.weight   |  9437184   |
-|    encoder.layers.5.key_proj.weight    |  1048576   |
-|   encoder.layers.5.value_proj.weight   |  1048576   |
-|      encoder.layers.5.norm.weight      |    1024    |
-|       encoder.layers.5.norm.bias       |    1024    |
-|     encoder.layers.5.norm2.weight      |    1024    |
-| encoder.layers.5.mlp.fused_proj.weight |  8388608   |
-| encoder.layers.5.mlp.down_proj.weight  |  4194304   |
-|   bottleneck.down_proj_global.weight   |   131072   |
-|   decoder.layers.0.query_proj.weight   |  9437184   |
-|    decoder.layers.0.key_proj.weight    |  1048576   |
-|   decoder.layers.0.value_proj.weight   |  1048576   |
-|      decoder.layers.0.norm.weight      |    1024    |
-|       decoder.layers.0.norm.bias       |    1024    |
-|     decoder.layers.0.norm2.weight      |    1024    |
-| decoder.layers.0.mlp.fused_proj.weight |  8388608   |
-| decoder.layers.0.mlp.down_proj.weight  |  4194304   |
-                        ----
-|   decoder.layers.5.query_proj.weight   |  9437184   |
-|    decoder.layers.5.key_proj.weight    |  1048576   |
-|   decoder.layers.5.value_proj.weight   |  1048576   |
-|      decoder.layers.5.norm.weight      |    1024    |
-|       decoder.layers.5.norm.bias       |    1024    |
-|     decoder.layers.5.norm2.weight      |    1024    |
-| decoder.layers.5.mlp.fused_proj.weight |  8388608   |
-| decoder.layers.5.mlp.down_proj.weight  |  4194304   |
-|       decoder.output_proj.weight       |  3145728   |
-|   decoder.position_embedding.weight    |   262144   |
-|      decoder.upscale_proj.weight       |   131072   |
-+----------------------------------------+------------+
-```
 
 ### Stage 2 -- Just-in-Time Candidate Generator (~450M)
 - **Purpose:** Produce 16 candidate latents per patch that cover the local conditional distribution.
@@ -150,50 +92,6 @@ Generation runs Stages 2 and 3 iteratively. Each refinement pass regenerates all
 - **Training:** 20 hours on 1×4090.
 - **Initial input at inference:** zeros (supports conditional prompting if desired).
 
-```
-+------------------------------------------------+------------+
-|                    Modules                     | Parameters |
-+------------------------------------------------+------------+
-|            latent_embedding.weight             |   131072   |
-|           layers.0.query_proj.weight           |  9437184   |
-|            layers.0.key_proj.weight            |  1048576   |
-|           layers.0.value_proj.weight           |  1048576   |
-|              layers.0.norm.weight              |    1024    |
-|               layers.0.norm.bias               |    1024    |
-|             layers.0.norm2.weight              |    1024    |
-|         layers.0.mlp.fused_proj.weight         |  8388608   |
-|         layers.0.mlp.down_proj.weight          |  4194304   |
-                    ----
-|          layers.11.query_proj.weight           |  9437184   |
-|           layers.11.key_proj.weight            |  1048576   |
-|          layers.11.value_proj.weight           |  1048576   |
-|             layers.11.norm.weight              |    1024    |
-|              layers.11.norm.bias               |    1024    |
-|             layers.11.norm2.weight             |    1024    |
-|        layers.11.mlp.fused_proj.weight         |  8388608   |
-|         layers.11.mlp.down_proj.weight         |  4194304   |
-|             positioning_16.weight              |  1048576   |
-|               linear_proj.weight               |  1048576   |
-|       noise_embedding.fused_proj.weight        |  8388608   |
-|        noise_embedding.down_proj.weight        |  4194304   |
-|    noise_layers.0.self_attn.qkv_proj.weight    |  3145728   |
-|    noise_layers.0.self_attn.out_proj.weight    |  1048576   |
-|      noise_layers.0.mlp.fused_proj.weight      |  8388608   |
-|      noise_layers.0.mlp.down_proj.weight       |  4194304   |
-|     noise_layers.0.input_layernorm.weight      |    1024    |
-| noise_layers.0.post_attention_layernorm.weight |    1024    |
-                       ----
-|    noise_layers.7.self_attn.qkv_proj.weight    |  3145728   |
-|    noise_layers.7.self_attn.out_proj.weight    |  1048576   |
-|      noise_layers.7.mlp.fused_proj.weight      |  8388608   |
-|      noise_layers.7.mlp.down_proj.weight       |  4194304   |
-|     noise_layers.7.input_layernorm.weight      |    1024    |
-| noise_layers.7.post_attention_layernorm.weight |    1024    |
-|       final_embedding.fused_proj.weight        |  8388608   |
-|        final_embedding.down_proj.weight        |   524288   |
-|            output_layernorm.weight             |    1024    |
-+------------------------------------------------+------------+
-```
 [Link to Candidate Generator](./code/stage_2_latent_generator_16x16_mask_git_iterative_big.py)
 
 ### Stage 3 -- Categorical Selector (~1.1B params)
@@ -203,34 +101,6 @@ Generation runs Stages 2 and 3 iteratively. Each refinement pass regenerates all
 - **Training:** 21 days on 1×4090.
 
 Total training: roughly 22 days on a single 4090.
-```
-+---------------------------------+------------+
-|             Modules             | Parameters |
-+---------------------------------+------------+
-|    embed_known_latents.weight   |   262144   |
-|  embed_predicted_latents.weight |  4194304   |
-|    layers.0.query_proj.weight   |  37748736  |
-|     layers.0.key_proj.weight    |  4194304   |
-|    layers.0.value_proj.weight   |  4194304   |
-|       layers.0.norm.weight      |    2048    |
-|        layers.0.norm.bias       |    2048    |
-|      layers.0.norm2.weight      |    2048    |
-|  layers.0.mlp.fused_proj.weight |  33554432  |
-|  layers.0.mlp.down_proj.weight  |  16777216  |
-                    ----
-|   layers.11.query_proj.weight   |  37748736  |
-|    layers.11.key_proj.weight    |  4194304   |
-|   layers.11.value_proj.weight   |  4194304   |
-|      layers.11.norm.weight      |    2048    |
-|       layers.11.norm.bias       |    2048    |
-|      layers.11.norm2.weight     |    2048    |
-| layers.11.mlp.fused_proj.weight |  33554432  |
-|  layers.11.mlp.down_proj.weight |  16777216  |
-|      positioning_16.weight      |   524288   |
-|        linear_proj.weight       |   32768    |
-+---------------------------------+------------+
-```
----
 
 ## Inference: Iterative Refinement
 
@@ -250,6 +120,11 @@ Also, a secondary note.  Stage 3 was only trained using 4 refinement steps, and 
 
 The intermediate version between these two extremes (adaptive-order autoregression and full-parallel sampling), would be to sample in batches (e.g. MaskGIT-like).  I believe this is likely the broadly correct answer, and depends on an empirical assessment of mutual information at each stage.  Low mutual information means high parallelization, high mutual information means low parallelization.  Finding the right balance minimizes inference time while maintaining sample quality.  Mutual information cannot directly be computed from entropy, however.
 
+## Inference
+6 full passes, 0 global refinement passes, entropy-based sampling
+![Results](./images/collage_6_0_entropy_sampling_main.png)
+
+Due to low number of full passes, the output remains blurry.  Still, there is good global structure forming.  The faces have less entropy than the background, and are therefore easier to generate with fewer full sampling steps.
 
 ## Inference Ablations
 
@@ -310,7 +185,7 @@ The pitch is that you trade inference speed for mode coverage and quantization-f
 The goal of this project is not to produce photorealistic images, it is to demonstrate novel techniques (the just-in-time codebook).  Indeed, to have latents converge to imperceptibility requires roughly ~12 full passes, while only the first 4 were trained on.  Nevertheless, FID / IS is run for completeness' sake.
 
 FID run on 5000 output images:  66.27; calculated using `torch_fidelity`.
-The score is likely high due to artifacting / patch edge boundaries when decoding.  This could be significantly ameliorated with a regression model trained to decode partially converged latents instead of using the autoencoder decoder, which expects perfect ones.  Indeed, even something like jpeg noise can increase the FID from 0 to 20+, despite having high PSNR and limited perceptual difference: [link](https://www.cs.cmu.edu/~clean-fid/).
+The score is likely high due to artifacting / patch edge boundaries when decoding, but also simply due to the nature of not having enough full passes.  The artificating / patch edge boundaries can be ameliorated using a regression model trained to decode partially converged latents instead of using the autoencoder decoder (which expects perfect latents).  Indeed, even something like jpeg noise can increase the FID from 0 to 20+, despite having high PSNR and limited perceptual difference: [link](https://www.cs.cmu.edu/~clean-fid/).  I would estimate training this regression model might drop FID from 66 to ~30.  But to drop FID further would require more refinement steps.
 
 IS on 5000 output images: 3.759 ± 0.062
 For reference, stylegan2 has an IS of 5.13 ± 0.02
