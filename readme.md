@@ -73,6 +73,12 @@ The diagram shows the following.  The bottom row shows the per-patch variance of
 
 As you can see, initially, the variance is very high (as the latent generator has zero context).  However, the variance rapidly plummets in most areas of the image as the model goes from 'generative mode' to 'refinement mode'.  This makes sense from a mutual information standpoint.  Most of the difficulty in generation is the global structure.  Once the global structure exists, most information is local refinement.  (This is what hierarchical VQVAEs bank on)
 
+The following two diagrams show the PSNR of the Latents themselves compared to ground truth.  Note that this is in tanh latent space, not color space.
+
+![closest_jit_psnr.png](./images/closest_jit_psnr.png)
+
+This suggests that most of the value is captured with 8 refinement steps, with the variance too high to meaningfully converge beyond 8.  I hypothesise that this might be due to an overly aggressive training regime, where 0-20% of the time, a random latent is chosen instead of the closest latent.  This seems to affect the tailend convergence, resulting in a lower final PSNR (the tradeoff being that the model is more resistant to early mistakes).
+
 ---
 
 ## Pipeline Overview
