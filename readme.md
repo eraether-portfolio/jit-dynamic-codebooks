@@ -81,7 +81,7 @@ While the above shows the variance, the following diagram shows the PSNR of the 
 
 This suggests that most of the value is captured with 8 refinement steps, with the variance too high to meaningfully converge beyond 8.  I hypothesise that this might be due to an overly aggressive training regime, where 0-20% of the time, a random candidate latent is chosen instead of the closest candidate latent.  This seems to affect the tailend convergence, resulting in a lower final PSNR (the tradeoff being that the model is more resistant to recovering from early mistakes).
 
-More concretely, once all mutual information is resolved in the image, what remains is intra-patch noise.  Allowing latents to drift is unrecoverable, because no information remains for how, specifically, to converge if the latent itself that is given as input cannot be trusted.
+More concretely, once all mutual information is resolved in the image, what remains is intra-patch noise.  Allowing latents to drift is unrecoverable, because no information remains for how, specifically, to converge if the latent itself that is given as input cannot be trusted.  This suggests that random candidate selection should be attenuated to 0 after a few steps.  It also suggests that, training this improved candidate suggestion model should allow for wholesale global sampling past a certain refinement step, as the latent should contain no further mutual information and so the distributions are disjoint and can be sampled independently.
 
 ---
 
