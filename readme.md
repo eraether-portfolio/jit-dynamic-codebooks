@@ -71,13 +71,15 @@ The practical claim is not that all 16 slots stay maximally spread; it's that th
 
 The diagram shows the following.  The bottom row shows the per-patch variance of the generated candidate latents.  The top row shows the decoded latents after a single additional full pass (bidirectionally sampling all 256 latents one by one).
 
-As you can see, initially, the variance is very high (as the latent generator has zero context).  However, the variance rapidly plummets in most areas of the image as the model goes from 'generative mode' to 'refinement mode'.  This makes sense from a mutual information standpoint.  Most of the difficulty in generation is the global structure.  Once the global structure exists, most information is local refinement.  (This is what hierarchical VQVAEs bank on)
+As you can see, initially, the variance is very high (as the latent generator has zero context).  However, the variance rapidly plummets in most areas of the image as the model goes from 'generative mode' to 'refinement mode'.  This makes sense from a mutual information standpoint.  Most of the difficulty in generation is the global structure.  Once the global structure exists, most information is local refinement.  (This is what hierarchical VQVAEs bank on).
 
-The following two diagrams show the PSNR of the Latents themselves compared to ground truth.  Note that this is in tanh latent space, not color space.
+Interestingly, the variance of the latents that make up the face are lower unconditionally.  This is almost certainly an artifact of the FFHQ face centering, and would unlikely show up in a less structured dataset. 
+
+While the above shows the variance, the following diagram shows the PSNR of the Latents themselves.  Note that this is in tanh latent space, not color space.
 
 ![closest_jit_psnr.png](./images/closest_jit_psnr.png)
 
-This suggests that most of the value is captured with 8 refinement steps, with the variance too high to meaningfully converge beyond 8.  I hypothesise that this might be due to an overly aggressive training regime, where 0-20% of the time, a random latent is chosen instead of the closest latent.  This seems to affect the tailend convergence, resulting in a lower final PSNR (the tradeoff being that the model is more resistant to early mistakes).
+This suggests that most of the value is captured with 8 refinement steps, with the variance too high to meaningfully converge beyond 8.  I hypothesise that this might be due to an overly aggressive training regime, where 0-20% of the time, a random candidate latent is chosen instead of the closest candidate latent.  This seems to affect the tailend convergence, resulting in a lower final PSNR (the tradeoff being that the model is more resistant to recovering from early mistakes).
 
 ---
 
