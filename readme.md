@@ -2,23 +2,31 @@
 ### Per-patch candidate generation with single-head multiple-choice learning
 Eugene Raether, AI Engineer & Researcher @ Qualia Tensor LLC
 
-## Foreword
+## What is this Document and Who is this for?
 
-This is a portfolio piece. It documents a generative modeling project I built and trained solo on a single GPU over several weeks, and it's written for a few different readers at once -- researchers, engineers, and hiring managers -- so a quick orientation is in order.
-I developed these ideas independently while working on the project. Some of them may have prior art I haven't yet found, and I've tried to flag where that's most likely. Where I claim something is novel, I mean it survived my own search -- not that I'm certain no one else has done it.
-If you're a recruiter or hiring manager, the short version is that I designed, trained, and debugged a three-stage model stack end-to-end on consumer hardware, and the results below are the artifact. If you're a researcher or engineer, the technical sections are where the interesting questions live, and I'd genuinely enjoy hearing what you think.
-My contact information is at the bottom. Thanks for reading.
+This document is a combination of a retrospective, a technical blog post, and a research paper.  It demonstrates my current capabilities in generative AI, and demonstrates my ability to take a novel deep learning idea from ideation to delivery.
 
-## Key Contributions (What's New Here)
+The intended audience is another AI researcher, albeit an unorthodox one.  This work is not a standard extension of existing techniques.  It is a new technique, applied to a difficult, competitive field in earnest.
 
-### Likely Genuinely Novel
+The discoveries are real.  I am not certain whether the domain the discoveries were applied to is the best possible match (generative AI), but the fact that the models converge to recognizable faces implies that these are not toy techniques, and the idea as a whole has real research potential.
 
-1. Single-head multiple-choice learning, which allows for MCL without head balancing or additional loss terms
-2. The model stack presented here: MaskGIT-style iterative refinement over a regenerated continuous codebook produced by single-head MCL.
+I have a number of useful techniques I have independently discovered and have used multiple times.  Some are part of this document.  Others require more research, but are already promising.
 
-### Potentially Novel
+Said Useful Techniques, Independently Discovered:
+1) Single-head MCL (presented in this document)
+2) Global Convolutional Attention (Expanded-Query-Receptive-Field Attention) (presented in this document)
+3) Training discrete bottlenecks (e.g. VQ-VAEs) with zero additional loss terms without codebook collapse
+4) Allowing for complete discontinuity when training neural networks (Instead of x' = f(x), which is how all deep learning works, this would allow for hard lookups -- y = values\[x\]).
 
-1. GCNN self-attention, which, in this project, resulted in training convergence to the same loss roughly **~2x faster over flash-attention-2** based on actual wall clock time (**~2.5x less steps**).  While @torch.compiled, there was no custom cuda kernel written for this implementation, which implies that the true speed improvements could, potentially, be even higher.
+### What About AI Engineering?
+
+While the big selling point are the techniques, I think this document also demonstrates **grit** and **end-to-end engineering capability**.  Training three separate models into one cohesive 1.85B pipeline is non-trivial.  Writing the training code for three separate models is non-trivial.  Increasing training speed by writing a custom attention mechanism with a good inductive bias is non-trivial.
+
+Spending 3 weeks training a model reflects a serious amount of engineering effort.
+
+While this portfolio piece does not demonstrate production-ready AI engineering, I have been involved in a number of other projects (renting servers using AWS and Azure, automated bidding of vast.ai resources, automated server provisioning of these resources, creating data annotation pipelines using Amazon Mechanical Turk).
+
+I also have a background in site reliability engineering, traditional software development, and test automation.  This project is not meant to demonstrate all of my skills or act as a resume, it is meant to be a showcase of one specific project.
 
 ## The Idea in One Paragraph
 
@@ -79,9 +87,13 @@ While the above shows the variance, the following diagram shows the PSNR of the 
 
 ![closest_jit_psnr.png](./images/closest_jit_psnr.png)
 
-This suggests that most of the value is captured with 8 refinement steps, with the variance too high to meaningfully converge beyond 8.  I hypothesise that this might be due to an overly aggressive training regime, where 0-20% of the time, a random candidate latent is chosen instead of the closest candidate latent.  This seems to affect the tailend convergence, resulting in a lower final PSNR (the tradeoff being that the model is more resistant to recovering from early mistakes).
+This suggests that most of the value is captured with 8 refinement steps, with the variance too high to meaningfully converge beyond 8.  
 
-More concretely, once all mutual information is resolved in the image, what remains is intra-patch noise.  Allowing latents to drift is unrecoverable, because no information remains for how, specifically, to converge if the latent itself that is given as input cannot be trusted.  This suggests that random candidate selection should be attenuated to 0 after a few steps.  It also suggests that, training this improved candidate suggestion model should allow for wholesale global sampling past a certain refinement step, as the latent should contain no further mutual information and so the distributions are disjoint and can be sampled independently.
+I initially hypothesized that this might have been due to an overly aggressive training regime, where 0-20% of the time, a random candidate latent is chosen instead of the closest candidate latent at any given refinement step as this creates a fundamental noise floor.
+
+However, training with 0% random candidate selection, this exact same refinement convergence was still observed.  This leads me to believe that the actual issue is that what remains is, essentially, disjoint noise after all mutual information is resolved.  And, with 16 samples, sampling from this disjoint noise gives ~4 bits of information.  In essence, the PSNR curve is not actually flat, it is simply shallow.  The 32x32x3 patch represented by each latent has very very high information content in comparison (24.5kb @ 8 bits / channel).  Which means that resolving this would actually take thousands of steps, even if all of the latents can be resolved simultaneously.
+
+While this technique essentially resolves all mutual information, a different approach is needed to get higher fidelity and resolve the per-latent noise floor.  One simple way would be to do MaskGIT with a VQVAE bottleneck (~1024 values), given the partially converged latents as conditioning.
 
 ---
 
@@ -178,7 +190,7 @@ This operation is a strict superset of attention, with normal dot product attent
 
 Because spatial structure is already encoded through this patchification process, the project uses learned absolute position embeddings rather than RoPE.
 
-This appears to be a very powerful inductive bias, as non-optimized (but compiled) pytorch code implementing this converges roughly 2x **faster** than the flash-attention-2 variant based on wall-clock time to reach the equivalent loss.
+This appears to be a very powerful inductive bias, as non-optimized (but compiled) pytorch code implementing this converges roughly 2x **faster** than the flash-attention-2 variant based on wall-clock time to reach the equivalent loss.  To be clear, this is, of course, slower to execute (surprisingly, not significantly slower due to the low context size), and converges in roughly 2.5x fewer steps.
 
 Optimizer: schedule-free.
 
