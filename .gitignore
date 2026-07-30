@@ -1,3 +1,9 @@
 __pycache__/
 output_images/
-code/
+code/*
+
+!code/hierarchical_stage_1_autoencoder_mlp.py
+!code/hierarchical_stage_2_vocabulary_generator_cnn.py
+!code/hierarchical_stage_3_predictor_cnn.py
+!code/stage_4_gan_v3.py
+!code/vqvae_test.py
