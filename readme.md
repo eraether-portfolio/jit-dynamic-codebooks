@@ -37,6 +37,8 @@ The results shown are still preliminary, but there is enough here to serve as a 
 
 An image is generated through iterative refinement.  First, a dynamic vocabulary is generated for each slot in the grid.  Then, there is a more traditional predictor that outputs a probability distribution over the dynamic vocabulary.  We sample one by one, which iteratively converges towards a coherent image, upscaling every two refinements until the final 64x64 grid is decoded into a full-res image.
 
+![pipeline](images/jit_dynamic_codebook_pipeline.png)
+
 Step 1: Train autoencoder.
 
 Step 2: Train dynamic vocabulary generator.  For each spatial patch, train a model to generate a small *local* codebook on demand -- 8 per-token candidate latent vectors conditioned on the global context.
@@ -107,12 +109,14 @@ Each 8x8 patch becomes a token, which is then processed and eventually decoded b
 
 The MLP is exactly a sequence of feed-forward layers from transformer land (RMSNorm followed by a SwiGLU).  Works fine for image data.
 
+```
 PSNR over 1000 samples:
 ae/downscaled_1/psnr:      34.388
 ae/downscaled_2/psnr:      32.497
 ae/downscaled_4/psnr:      30.619
 ae/downscaled_8/psnr:      28.282
 ae/downscaled_16/psnr:     26.118
+```
 
 [Link to Autoencoder](./code/hierarchical_stage_1_autoencoder_mlp.py)
 
@@ -128,6 +132,7 @@ Because there is only a single output head and the samples are generated through
 
 While a ViT might, at the limit, result in better estimation of the conditional density, the 7-layer CNN still allows for global mixing at the 4x4 and 8x8 levels, and gives a nice narrowing of the receptive field exactly as the focus becomes more and more on local detail refinement.
 
+```
 Losses:
 loss_16_0:   7.929   ( --- )
 loss_16_1:   5.427   (31.56% drop)
@@ -139,6 +144,7 @@ loss_2_0:    1.653   (17.35% drop)
 loss_2_1:    1.269   (23.23% drop)
 loss_1_0:    1.113   (12.29% drop)
 loss_1_1:    0.886   (20.40% drop)
+```
 
 Interestingly, the refinements (\_0 -> \_1) have bigger drops compared to the upscales (\_1 -> \_0).  This is perhaps because there is more ambiguity when upscaling.  Or, perhaps, the method by which upscaling happens (simply a `.repeat()`) needs to change.
 
@@ -325,7 +331,7 @@ Therefore, the goal should be: train in the high dropout regime for as long as p
 It is not actually clear if code reinitialization is fully required, as the model tends to simply learn to use more codes over time as it is forced to use them.  However, it might help.
 
 A bigger batch size will keep more codes alive.  A bigger number of tokens passing through the bottleneck will keep more codes alive.
-
+```
 PSNR over 1000 samples:
 ae/downscaled_1/psnr:      27.062
 ae/downscaled_2/psnr:      25.203
@@ -333,17 +339,8 @@ ae/downscaled_4/psnr:      23.316
 ae/downscaled_8/psnr:      20.898
 ae/downscaled_16/psnr:     19.178
 vqvae/unique_codes:        541
-
+```
 compression ratio: ~75x at full resolution (~350 kB (512x512 .png filesize) -> 4.5kB (4096 codes \* 9 bits/code))
 
 [Link to VQVAE Code](./code/vqvae_test.py)
 
-
-## DIFFUSION
-
-Hyperspherical diffusion (latents lie on a hypersphere)
-<Example of Diffusion>
-
-## Rectified Flow
-
-<Example of Rectified Flow>
