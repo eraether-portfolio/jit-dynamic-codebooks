@@ -1,5 +1,5 @@
 # Just-In-Time Dynamic Codebooks for Generative Modeling
-### Per-patch candidate generation with single-head multiple-choice learning
+### Hierarchical MaskGIT with a Dynamic Vocabulary Through Single-Head Multiple-Choice Learning
 Eugene Raether, AI Engineer & Researcher @ Qualia Tensor LLC
 
 ![Results](./images/collage_6_0_entropy_sampling_main.png)
